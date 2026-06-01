@@ -10,6 +10,7 @@ interface CfEnv {
   KV: KVNamespace;
   REFRESH_TOKEN?: string;
   ADMIN_TOKEN?: string;
+  ACCESS_TOKEN?: string;
   SPEED_TIMEOUT_MS?: string;
   SITE_TIMEOUT_MS?: string;
   FETCH_TIMEOUT_MS?: string;
@@ -20,6 +21,7 @@ function buildConfig(env: CfEnv): AppConfig {
   return {
     adminToken: env.ADMIN_TOKEN,
     refreshToken: env.REFRESH_TOKEN,
+    accessToken: env.ACCESS_TOKEN,
     speedTimeoutMs: parseInt(env.SPEED_TIMEOUT_MS || '') || DEFAULT_SPEED_TIMEOUT_MS,
     siteTimeoutMs: parseInt(env.SITE_TIMEOUT_MS || '') || DEFAULT_SITE_TIMEOUT_MS,
     fetchTimeoutMs: parseInt(env.FETCH_TIMEOUT_MS || '') || DEFAULT_FETCH_TIMEOUT_MS,

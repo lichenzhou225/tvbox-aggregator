@@ -435,7 +435,7 @@ async function _runAggregation(storage: Storage, config: AppConfig, startTime: n
   const jarBaseUrl = config.workerBaseUrl || config.localBaseUrl;
   if (jarBaseUrl) {
     console.log(`[aggregation] Step 7: Rewriting JAR URLs for proxy (${jarBaseUrl})...`);
-    merged = await rewriteJarUrls(merged, jarBaseUrl, storage);
+    merged = await rewriteJarUrls(merged, jarBaseUrl, storage, config.accessToken);
   } else {
     console.log('[aggregation] Step 7: Skipping JAR rewrite (no base URL)');
   }
@@ -559,7 +559,7 @@ async function processMacCMSSources(
   }
 
   const proxyBaseUrl = config.workerBaseUrl || config.localBaseUrl;
-  const sites = macCMSToTVBoxSites(validEntries, proxyBaseUrl, speedMap);
+  const sites = macCMSToTVBoxSites(validEntries, proxyBaseUrl, speedMap, config.accessToken);
   console.log(`[aggregation] Converted ${sites.length} MacCMS sources to TVBoxSites`);
 
   return [{

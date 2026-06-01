@@ -58,6 +58,10 @@ export function createApp(deps: AppDeps): Hono {
 
   // ─── 主配置 ────────────────────────────────────────────
   app.get('/', async (c) => {
+    if (!verifyAccess(c.req.raw, config)) {
+      return c.json({ error: 'Access denied. Provide ?access_token=xxx or Authorization: Bearer xxx' }, 401);
+    }
+
     const cached = await storage.get(KV_MERGED_CONFIG);
 
     if (!cached) {
@@ -76,6 +80,10 @@ export function createApp(deps: AppDeps): Hono {
 
   // ─── 纯直播配置 ────────────────────────────────────────
   app.get('/live-config', async (c) => {
+    if (!verifyAccess(c.req.raw, config)) {
+      return c.json({ error: 'Access denied' }, 401);
+    }
+
     const cached = await storage.get(KV_MERGED_CONFIG);
 
     if (!cached) {
@@ -108,6 +116,10 @@ export function createApp(deps: AppDeps): Hono {
 
   // ─── .json 下载别名 ────────────────────────────────────
   app.get('/index.json', async (c) => {
+    if (!verifyAccess(c.req.raw, config)) {
+      return c.json({ error: 'Access denied' }, 401);
+    }
+
     const cached = await storage.get(KV_MERGED_CONFIG);
     if (!cached) {
       return c.json({ error: 'No config available yet.' }, 503);
@@ -121,6 +133,10 @@ export function createApp(deps: AppDeps): Hono {
   });
 
   app.get('/live.json', async (c) => {
+    if (!verifyAccess(c.req.raw, config)) {
+      return c.json({ error: 'Access denied' }, 401);
+    }
+
     const cached = await storage.get(KV_MERGED_CONFIG);
     if (!cached) {
       return c.json({ error: 'No config available yet.' }, 503);
@@ -501,7 +517,10 @@ export function createApp(deps: AppDeps): Hono {
   // ─── Fetch 代理端点（仅 CF 版，供本地 Docker 中转请求）──
   if (config.workerBaseUrl) {
     app.get('/fetch-proxy', async (c) => {
-      // 认证：adminToken 或 refreshToken
+      // 认证：adminToken 或 refreshToken 或 accessToken
+      if (!verifyAccess(c.req.raw, config)) {
+        return c.json({ error: 'Access denied' }, 401);
+      }
       const auth = c.req.raw.headers.get('Authorization');
       const validTokens = [config.adminToken, config.refreshToken].filter(Boolean);
       if (validTokens.length > 0 && !validTokens.some((t) => auth === `Bearer ${t}`)) {
@@ -787,6 +806,10 @@ export function createApp(deps: AppDeps): Hono {
   // ─── MacCMS API 代理（CF 版 + 本地版）──────────────────────
   if (config.workerBaseUrl || config.localBaseUrl) {
     app.all('/api/:key', async (c) => {
+      if (!verifyAccess(c.req.raw, config)) {
+        return c.json({ error: 'Access denied' }, 401);
+      }
+
       const key = c.req.param('key');
       const raw = await storage.get(KV_MACCMS_SOURCES);
       const sources: MacCMSSourceEntry[] = raw ? JSON.parse(raw) : [];
@@ -859,6 +882,10 @@ export function createApp(deps: AppDeps): Hono {
   if (config.workerBaseUrl) {
     // CF 版：用 CF Cache + KV 二进制缓存
     app.get('/jar/:key', async (c) => {
+      if (!verifyAccess(c.req.raw, config)) {
+        return c.json({ error: 'Access denied' }, 401);
+      }
+
       const key = c.req.param('key');
 
       // 1. 查 CF Cache
@@ -996,6 +1023,10 @@ export function createApp(deps: AppDeps): Hono {
   // ─── 直播源代理（仅 CF 版）──────────────────────────────
   if (config.workerBaseUrl) {
     app.get('/live/:key', async (c) => {
+      if (!verifyAccess(c.req.raw, config)) {
+        return c.json({ error: 'Access denied' }, 401);
+      }
+
       const key = c.req.param('key');
 
       // 1. 查 CF Cache
@@ -1041,6 +1072,9 @@ export function createApp(deps: AppDeps): Hono {
   // ─── 图片代理（仅 CF 版）──────────────────────────────
   if (config.workerBaseUrl) {
     app.get('/img/*', async (c) => {
+      // 图片代理：TVBox 通过 pic 前缀拼接构造 URL，无法加 access_token，因此跳过 token 校验
+      // 如果希望保护图片代理，建议使用 Cloudflare WAF 或自定义域名 IP 白名单
+
       // 从完整 URL 中提取原始图片地址（/img/ 之后的所有内容，含 query string）
       const fullUrl = c.req.url;
       const marker = '/img/';
@@ -1544,6 +1578,21 @@ export function createApp(deps: AppDeps): Hono {
 function verifyAdmin(request: Request, config: AppConfig): boolean {
   const token = config.adminToken;
   if (!token) return false;
+  const auth = request.headers.get('Authorization');
+  return auth === `Bearer ${token}`;
+}
+
+/**
+ * 验证访问令牌（用于保护公开端点）
+ * - 未设置 accessToken 时允许所有访问（向下兼容）
+ * - 支持 query 参数 ?access_token=xxx 和 Authorization: Bearer xxx
+ */
+function verifyAccess(request: Request, config: AppConfig): boolean {
+  const token = config.accessToken;
+  if (!token) return true; // 未设置令牌时允许访问
+  const url = new URL(request.url);
+  const queryToken = url.searchParams.get('access_token');
+  if (queryToken === token) return true;
   const auth = request.headers.get('Authorization');
   return auth === `Bearer ${token}`;
 }
